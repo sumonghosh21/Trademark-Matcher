@@ -1,8 +1,5 @@
 streamlit
- pandas
-sklearn.feature_extraction.text import TfidfVectorizer
-sklearn.metrics.pairwise import cosine_similarity
- nltk
-nltk.corpus import stopwords
- string
-  base64
+pandas
+scikit-learn
+nltk
+openpyxl

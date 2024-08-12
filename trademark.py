@@ -8,17 +8,18 @@ import string
 import base64
 
 nltk.download('stopwords')
-def preprocess_text(text, remove_punct, remove_stop):     # Text preprocessing function
+
+
+def preprocess_text(text, remove_punct, remove_stop):
     stop_words = set(stopwords.words('english'))
-    text = text.lower()  # Lowercase
+    text = text.lower()
     if remove_punct:
-        text = ''.join([char for char in text if char not in string.punctuation])  # Remove punctuation
+        text = ''.join([char for char in text if char not in string.punctuation])
     if remove_stop:
-        text = ' '.join([word for word in text.split() if word not in stop_words])  # Remove stopwords
+        text = ' '.join([word for word in text.split() if word not in stop_words])
     return text
 
 
-# Function to compute similarity and find similar trademarks
 def find_similar_trademarks(df, trademark, top_n, remove_punct, remove_stop, max_df, min_df):
     try:
         df['cleaned_trademark'] = df['trademark'].apply(lambda x: preprocess_text(x, remove_punct, remove_stop))
@@ -30,14 +31,14 @@ def find_similar_trademarks(df, trademark, top_n, remove_punct, remove_stop, max
         return similar_trademarks
     except Exception as e:
         st.error(f"An error occurred while finding similar trademarks: {e}")
+        st.write(f"Exception details: {e}")
         return pd.Series()
 
 
-# Function to create a download link for the similarity results
 def create_download_link(df):
     try:
         csv = df.to_csv(index=False)
-        b64 = base64.b64encode(csv.encode()).decode()  # some strings <-> bytes conversions necessary here
+        b64 = base64.b64encode(csv.encode()).decode()
         href = f'<a href="data:file/csv;base64,{b64}" download="similar_trademarks.csv">Download CSV file</a>'
         return href
     except Exception as e:
@@ -45,7 +46,6 @@ def create_download_link(df):
         return ""
 
 
-# Streamlit app
 st.set_page_config(page_title='Trademark Similarity Finder', layout='wide')
 
 st.markdown("""
@@ -78,12 +78,17 @@ def validate_file(file, file_type):
         else:
             df = pd.read_excel(file)
 
-        required_columns = ['trademark', 'prior_user', 'class_number', 'preparator']
-        missing_columns = [col for col in required_columns if col not in df.columns]
-        if missing_columns:
-            return f"The uploaded file is missing the following columns: {', '.join(missing_columns)}."
-        if df['trademark'].isnull().any():
-            return "The 'trademark' column contains missing values."
+        # Normalize column names
+        df.columns = df.columns.str.strip().str.lower()
+
+        # Check for 'trademark' column
+        if 'trademark' not in df.columns:
+            if 'trademark' in df.columns:
+                df.rename(columns={'trademark': 'trademark'}, inplace=True)
+            else:
+                return "The uploaded file is missing the 'trademark' column."
+
+        st.write("Columns in DataFrame after normalization:", df.columns)
         return None
     except pd.errors.ParserError:
         return "Error parsing the file. Please ensure it's a valid CSV or Excel file."
@@ -105,40 +110,58 @@ if uploaded_file is not None:
             else:
                 df = pd.read_excel(uploaded_file)
 
+            # Normalize column names
+            df.columns = df.columns.str.strip().str.lower()
+
             st.write('## Data Preview')
-            st.write(df)
+            st.write(df.head())  # Print the first few rows for inspection
+            st.write("Columns in DataFrame:", df.columns)
 
-            # Sidebar options
-            st.sidebar.header('Options')
-            remove_punct = st.sidebar.checkbox('Remove Punctuation', value=True)
-            remove_stop = st.sidebar.checkbox('Remove Stopwords', value=True)
-            show_preprocessed = st.sidebar.checkbox('Show Preprocessed Data', value=False)
-            max_df = st.sidebar.slider('Max Document Frequency (max_df)', 0.0, 1.0, 1.0)
-            min_df = st.sidebar.slider('Min Document Frequency (min_df)', 0, 10, 1)
+            # Check if 'trademark' column exists
+            if 'trademark' not in df.columns:
+                st.error("The DataFrame does not contain the 'trademark' column.")
+            else:
+                # Sidebar options
+                st.sidebar.header('Options')
+                remove_punct = st.sidebar.checkbox('Remove Punctuation', value=True)
+                remove_stop = st.sidebar.checkbox('Remove Stopwords', value=True)
+                show_preprocessed = st.sidebar.checkbox('Show Preprocessed Data', value=False)
+                max_df = st.sidebar.slider('Max Document Frequency (max_df)', 0.0, 1.0, 1.0)
+                min_df = st.sidebar.slider('Min Document Frequency (min_df)', 0, 10, 1)
 
-            trademark = st.selectbox('Select a Trademark', df['trademark'].tolist())
-            top_n = st.slider('Number of Similar Trademarks to Find', 1, 10, 3)
+                trademark = st.selectbox('Select a Trademark', df['trademark'].tolist())
+                top_n = st.slider('Number of Similar Trademarks to Find', 1, 10, 3)
 
-            if st.button('Find Similar Trademarks'):
-                with st.spinner('Computing similarities...'):
-                    similar_trademarks = find_similar_trademarks(df, trademark, top_n, remove_punct, remove_stop,
-                                                                 max_df, min_df)
-                if not similar_trademarks.empty:
-                    st.write('## Similar Trademarks')
-                    similar_df = pd.DataFrame({
-                        'Trademark': similar_trademarks.index,
-                        'Similarity': similar_trademarks.values
-                    })
-                    # Merge with original data to get additional details
-                    similar_df = similar_df.merge(df, left_on='Trademark', right_on='trademark')
-                    st.write(similar_df[['Trademark', 'Similarity', 'prior_user', 'class_number', 'preparator']])
-                    st.markdown(create_download_link(similar_df), unsafe_allow_html=True)
+                if st.button('Find Similar Trademarks'):
+                    with st.spinner('Computing similarities...'):
+                        similar_trademarks = find_similar_trademarks(df, trademark, top_n, remove_punct, remove_stop,
+                                                                     max_df, min_df)
+                    if not similar_trademarks.empty:
+                        st.write('## Similar Trademarks')
+                        similar_df = pd.DataFrame({
+                            'Trademark': similar_trademarks.index,
+                            'Similarity': similar_trademarks.values
+                        })
+                        # Merge with original data to get additional details if present
+                        if 'prior_user' in df.columns and 'class_number' in df.columns and 'preparator' in df.columns:
+                            similar_df = similar_df.merge(df, left_on='Trademark', right_on='trademark')
+                            st.write(
+                                similar_df[['Trademark', 'Similarity', 'prior_user', 'class_number', 'preparator']])
+                        else:
+                            st.write(similar_df[['Trademark', 'Similarity']])
 
-                if show_preprocessed:
-                    st.write('## Preprocessed Data')
-                    st.write(df[['trademark', 'cleaned_trademark', 'prior_user', 'class_number', 'preparator']])
+                        st.markdown(create_download_link(similar_df), unsafe_allow_html=True)
+
+                    if show_preprocessed:
+                        st.write('## Preprocessed Data')
+                        st.write(df[['trademark', 'cleaned_trademark'] +
+                                    [col for col in ['prior_user', 'class_number', 'preparator'] if col in df.columns]])
         except Exception as e:
             st.error(f"An unexpected error occurred: {e}")
+            st.write(f"Exception details: {e}")
+
+
+
 
 
 

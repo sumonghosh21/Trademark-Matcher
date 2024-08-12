@@ -22,11 +22,19 @@ def preprocess_text(text, remove_punct, remove_stop):
 
 def find_similar_trademarks(df, trademark, top_n, remove_punct, remove_stop, max_df, min_df):
     try:
+        # Ensure unique trademarks
+        df = df.drop_duplicates(subset=['trademark'])
         df['cleaned_trademark'] = df['trademark'].apply(lambda x: preprocess_text(x, remove_punct, remove_stop))
         vectorizer = TfidfVectorizer(max_df=max_df, min_df=min_df)
         tfidf_matrix = vectorizer.fit_transform(df['cleaned_trademark'])
         cosine_sim = cosine_similarity(tfidf_matrix, tfidf_matrix)
         cosine_sim_df = pd.DataFrame(cosine_sim, index=df['trademark'], columns=df['trademark'])
+
+        # Check if the selected trademark is in the DataFrame
+        if trademark not in cosine_sim_df.index:
+            st.error(f"The selected trademark '{trademark}' is not present in the DataFrame.")
+            return pd.Series()
+
         similar_trademarks = cosine_sim_df[trademark].sort_values(ascending=False)[1:top_n + 1]
         return similar_trademarks
     except Exception as e:
@@ -83,10 +91,7 @@ def validate_file(file, file_type):
 
         # Check for 'trademark' column
         if 'trademark' not in df.columns:
-            if 'trademark' in df.columns:
-                df.rename(columns={'trademark': 'trademark'}, inplace=True)
-            else:
-                return "The uploaded file is missing the 'trademark' column."
+            return "The uploaded file is missing the 'trademark' column."
 
         st.write("Columns in DataFrame after normalization:", df.columns)
         return None
@@ -112,6 +117,9 @@ if uploaded_file is not None:
 
             # Normalize column names
             df.columns = df.columns.str.strip().str.lower()
+
+            # Ensure unique trademarks
+            df = df.drop_duplicates(subset=['trademark'])
 
             st.write('## Data Preview')
             st.write(df.head())  # Print the first few rows for inspection
@@ -159,6 +167,11 @@ if uploaded_file is not None:
         except Exception as e:
             st.error(f"An unexpected error occurred: {e}")
             st.write(f"Exception details: {e}")
+
+
+
+
+
 
 
 

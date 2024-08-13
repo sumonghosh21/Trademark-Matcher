@@ -1,3 +1,5 @@
+
+
 import streamlit as st
 import pandas as pd
 from sklearn.feature_extraction.text import TfidfVectorizer
@@ -164,9 +166,15 @@ if uploaded_file is not None:
                         st.write('## Preprocessed Data')
                         st.write(df[['trademark', 'cleaned_trademark'] +
                                     [col for col in ['prior_user', 'class_number', 'preparator'] if col in df.columns]])
+        except pd.errors.EmptyDataError:
+            st.error("The uploaded file is empty.")
+        except pd.errors.ParserError:
+            st.error("The file could not be parsed. Please ensure it's properly formatted.")
         except Exception as e:
             st.error(f"An unexpected error occurred: {e}")
             st.write(f"Exception details: {e}")
+
+
 
 
 
